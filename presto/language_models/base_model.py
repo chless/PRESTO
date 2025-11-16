@@ -66,9 +66,9 @@ class LMMMetaForCausalLM(ABC):
         # modality x batch_size x instance_idx x modality_token_width x embedding_hidden_size
         projected_tensors = []
         # assuming that if caching is enabled, we'll never have past_key_values AND need to encode the instruction modality values
-        #<DEBUG>
-        # TODO: this never works, let graph embeddings never used. FIX IT.
-        if past_key_values is None:
+        kv_cache_first_token_first_layer = past_key_values[0][0]
+        first_token_forward = kv_cache_first_token_first_layer is None
+        if first_token_forward:
             for m in self.modalities:
                 m_vals = m.forward(kwargs.get(m.name))
                 mp_vals = []
@@ -90,9 +90,10 @@ class LMMMetaForCausalLM(ABC):
                     mp_vals.append(instance_val_list)
                     
                 projected_tensors.append(mp_vals)
-        #</DEBUG>
 
         indices = None
+        #<DEBUG>
+        # TODO: figure out why graph embedding is not injected in emgbedding sequence
         for i, input_ids_sample in enumerate(input_ids):
             is_text_mask = input_ids_sample >= 0
 
@@ -166,4 +167,5 @@ class LMMMetaForCausalLM(ABC):
             )
         except:
             projected_tensors = None
+        # </DEBUG>
         return None, attention_mask, past_key_values, inputs_embeds, labels, projected_tensors
