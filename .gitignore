@@ -171,3 +171,6 @@ checkpoints/
 # Scripts .txt
 scripts/scaffold/*.txt
 scripts/scaffold/*.pkl
+
+.vscode
+checkpoint
