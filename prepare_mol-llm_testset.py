@@ -61,6 +61,7 @@ def conversation_test_forward_reaction_prediction(instance, format = "smiles", t
     assert instance['input_mol_string'] in instance['prompt_text']
     input = instance['smiles']
     output = sf.decoder(instance['target'])
+    task = instance['task']
     
     SYSTEM_PROMPT = """You are a chemist. Now you are given a reaction equation. Please predict the product of the reaction. The reaction equation has the following format:
     ```
@@ -130,7 +131,7 @@ def conversation_test_forward_reaction_prediction(instance, format = "smiles", t
     system_prompt = SYSTEM_PROMPT.replace("<REP_1>", "structure" if token else format.upper()).replace("<REP_2>", format.upper())
     
     content = input_template
-    assert len(smiles), f"{task    } processing returned empty smiles list.\nInstance: {instance}"
+    assert len(smiles), f"{task} processing returned empty smiles list.\nInstance: {instance}"
     return {
         "smiles": smiles,
         "messages": [
@@ -148,6 +149,7 @@ def conversation_test_forward_reaction_prediction(instance, format = "smiles", t
 def conversation_test_molecule_generation(instance):
     prompt_text = instance['prompt_text']
     output = instance['target']
+    task = instance['task']
 
 
     SYSTEM_PROMPT = """You are a chemist. Now you are given a description of a molecule. Please generate a molecule that meets the description."""
@@ -191,6 +193,7 @@ def conversation_test_molecule_captioning(instance, format = "smiles", token=Tru
     assert instance['input_mol_string'] in instance['prompt_text']
     output = instance['target']
     input = instance['smiles']
+    task = instance['task']
 
     SYSTEM_PROMPT = """You are a chemist. Now you are given a representation of a molecule. Please help me to understand the molecule."""
 
@@ -227,12 +230,14 @@ def conversation_test_property_prediction(instance, format = "smiles", token=Tru
     assert instance['input_mol_string'] in instance['prompt_text']
     input = instance['smiles']
     output = instance['target']
+    task = instance['task']
+
 
     SYSTEM_PROMPT = """You are a chemist. Now you are given a representation of a molecule.  Please predict a molecular property asked by a instruction."""
 
     instruction = instance['instruction'].replace('<INPUT>', MOLECULE_TOKEN)
     selfies, smiles, molecules = process_reaction_equation(input, format, token)
-    assert len(smiles), f"{task    } processing returned empty smiles list.\nInstance: {instance}"
+    assert len(smiles), f"{task} processing returned empty smiles list.\nInstance: {instance}"
     return {
                 "smiles": smiles,
                 "messages": [
@@ -256,6 +261,7 @@ def conversation_test_reagent_prediction(instance, format = "smiles", token=True
     products = products.replace('<SELFIES>', '').replace('</SELFIES>', '').strip()
     products = sf.decoder(products)
     output = sf.decoder(instance['target'])
+    task = instance['task']
 
     SYSTEM_PROMPT = """You are a chemist. Now you are given a reaction equation. Please predict the possible reagents of the reaction. The reaction equation has the following format:
     ```
@@ -345,6 +351,7 @@ def conversation_test_retrosynthesis(instance, format = "smiles", token=True):
     assert instance['input_mol_string'] in instance['prompt_text']
     input = instance['smiles']
     output = instance['target']
+    task = instance['task']
 
     SYSTEM_PROMPT = """You are a chemist. Now you are given a product molecule. Please predict the the reactant molecules of the reaction.
     The reaction equation has the following format:
