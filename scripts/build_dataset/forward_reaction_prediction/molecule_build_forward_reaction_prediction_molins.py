@@ -7,7 +7,8 @@ from typing import List
 
 import selfies as sf
 from datasets import load_dataset, DatasetDict, Dataset
-
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from presto.constants import ROLE_ASSISTANT, ROLE_USER, ROLE_SYSTEM
 from presto.chemistry_tools.reaction import multicomponent_smiles_to_list, list_to_multicomponent_smiles
 from presto.chemistry_tools.smiles import convert_to_canonical_smiles
