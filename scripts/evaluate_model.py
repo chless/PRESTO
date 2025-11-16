@@ -70,13 +70,15 @@ def _evaluate(model, tokenizer, dataset, args):
     references = []
     evaluator = EVALUATOR_BUILDERS[args.evaluator]()
 
+    llama2_chat_template = transformers.AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf").get_chat_template()
+
     dataset = tqdm.tqdm(dataset, desc="Evaluating", total=len(dataset))
     for entry in dataset:
         ground_truth = entry['ground_truth']
         if args.is_icl:
             encoded_dict = encode_interleaved_data(entry, tokenizer, model.modalities)
         else:
-            encoded_dict = encode_chat(entry, tokenizer, model.modalities)
+            encoded_dict = encode_chat(entry, tokenizer, model.modalities, chat_template=llama2_chat_template)
 
         with torch.inference_mode():
             output_ids = model.generate(

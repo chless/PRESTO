@@ -20,14 +20,16 @@ from PIL import Image
 
 from presto.constants import IGNORE_INDEX
 from presto.modalities.base_modality import Modality
+from transformers import AutoTokenizer
 
 def encode_chat(
     item: Dict,
     tokenizer: transformers.PreTrainedTokenizer,
     modalities: List[Modality],
+    chat_template,
 ) -> Dict:
     messages = list(item["messages"])
-    chat_as_string = tokenizer.apply_chat_template(messages, tokenize=False)
+    chat_as_string = tokenizer.apply_chat_template(messages, tokenize=False, chat_template=chat_template)
 
     token_to_modality = {m.token: m for m in modalities}
     modality_token_counts = Counter()
