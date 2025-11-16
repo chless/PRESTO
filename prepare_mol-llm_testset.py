@@ -508,7 +508,9 @@ def process_instance(instance):
         out_dict = task_specific_processor(instance)
 
         instance['messages'] = out_dict['messages']
-        instance['molecule_2d'] = out_dict['smiles']
+        instance['molecules'] = {
+            "smiles": out_dict['smiles']
+        }
 
         for k, v in instance.items():
             assert v is not None, f"Task-{task} has unprocessed field: {k}.\n{instance}"
