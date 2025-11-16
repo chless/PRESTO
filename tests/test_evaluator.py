@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from bioagent.chemistry_tools.evaluator import MoleculeSMILESEvaluator, ClassificationEvaluator, RegressionEvaluator, MoleculeCaptionEvaluator
+from presto.chemistry_tools.evaluator import MoleculeSMILESEvaluator, ClassificationEvaluator, RegressionEvaluator, MoleculeCaptionEvaluator
 
 CLASSIFICATION_EVALUATOR_TEST_CASES = [
     ([0, 1, 0, 1], [1, 1, 0, 0], 0.5, 0.5, 0.5),

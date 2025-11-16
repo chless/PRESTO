@@ -3,14 +3,14 @@ import os
 
 SKIP_TESTS = False
 try:
-    from bioagent.modalities.molecule_2d import GNN
+    from presto.modalities.molecule_2d import GNN
 except ImportError:
     SKIP_TESTS = True
 
 import torch
 
-from bioagent.modalities import Molecule2DModality
-from bioagent.chemistry_tools import smiles_to_graph
+from presto.modalities import Molecule2DModality
+from presto.chemistry_tools import smiles_to_graph
 
 INIT_CHECKPOINT = os.environ.get("MOLECULE_2D_PATH", None)
 SKIP_TESTS = SKIP_TESTS or INIT_CHECKPOINT is None

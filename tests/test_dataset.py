@@ -3,9 +3,9 @@ import transformers
 import torch
 import pytest
 
-from bioagent.modalities import MODALITY_BUILDERS
-from bioagent.model_utils import fix_tokenizer
-from bioagent.data import (
+from presto.modalities import MODALITY_BUILDERS
+from presto.model_utils import fix_tokenizer
+from presto.data import (
     Dataset, 
     LMMDataset, 
     DataCollatorForSupervisedLMMDataset, 
@@ -14,7 +14,7 @@ from bioagent.data import (
     _DATASETS,
     _MIXTURES
 )
-from bioagent.training import TrainingArguments
+from presto.training import TrainingArguments
 from tqdm import tqdm
 
 

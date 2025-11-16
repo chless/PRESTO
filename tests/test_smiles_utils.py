@@ -8,7 +8,7 @@ except ImportError:
     SKIP_TESTS = True
 
 import torch
-from bioagent.chemistry_tools import smiles_to_graph
+from presto.chemistry_tools import smiles_to_graph
 
 
 def smiles_to_graph_mock(smiles):

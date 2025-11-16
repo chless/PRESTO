@@ -1,7 +1,7 @@
-from bioagent.language_models.llama import (
+from presto.language_models.llama import (
     LlamaLMMForCausalLM,
 )
-from bioagent.language_models.mistral import (
+from presto.language_models.mistral import (
     MistralLMMForCausalLM,
 )
 

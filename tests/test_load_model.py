@@ -1,6 +1,6 @@
 import os
-from bioagent.inference import load_trained_lora_model, load_trained_model
-from bioagent.language_models.llama import LlamaLMMForCausalLM
+from presto.inference import load_trained_lora_model, load_trained_model
+from presto.language_models.llama import LlamaLMMForCausalLM
 
 if __name__ == "__main__":
     # check load full model

@@ -20,7 +20,7 @@ from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.warning')
 import datetime
 
-from bioagent.constants import ROLE_USER, ROLE_SYSTEM
+from presto.constants import ROLE_USER, ROLE_SYSTEM
 
 MOLECULE_TOKEN = "<molecule_2d>"
 

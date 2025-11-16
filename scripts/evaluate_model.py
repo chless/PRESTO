@@ -8,6 +8,9 @@ import transformers
 import torch
 import tqdm
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from presto.training import ModelArguments
 from presto.inference import load_trained_lora_model, load_trained_model
 from presto.data_tools import encode_chat, parse_chat_output, encode_interleaved_data
