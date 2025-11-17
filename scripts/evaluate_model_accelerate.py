@@ -53,7 +53,7 @@ class EvaluationArguments(ModelArguments):
     is_icl: bool = field(default=False, metadata={"help": "Whether ICL testing is enabled."})
     verbose: bool = field(default=False, metadata={"help": "Print verbose output."})
     batch_size: int = field(default=1, metadata={"help": "Batch size per GPU."})
-    num_workers: int = field(default=4, metadata={"help": "DataLoader workers."})
+    num_workers: int = field(default=4, metadata={"help": "DataLoader workers."})d
 
 
 class EvaluationDataset(torch.utils.data.Dataset):
@@ -283,8 +283,7 @@ def main():
             'binary_classificaiton_probs': binary_classificaiton_probs,
             "output_dir": args.output_dir,
         }
-        tokenizer_path = os.path.join(output_dir, "tokenizer")
-        tokenizer.save_pretrained(tokenizer_path)
+        tokenizer.save_pretrained(output_dir)
 
         save_predictions(**save_dict)
 
