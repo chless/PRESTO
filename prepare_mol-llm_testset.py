@@ -173,10 +173,10 @@ def conversation_test_molecule_generation(instance):
     caption_pattern = r'<DESCRIPTION>.*?</DESCRIPTION>'
     caption = re.search(caption_pattern, prompt_text).group(0)
     caption = caption.replace('<DESCRIPTION>', '').replace('</DESCRIPTION>', '')
-    smiles = ["None"]
+    smiles = ["CCCC"] # dummy smiles
     assert len(smiles), f"{task    } processing returned empty smiles list.\nInstance: {instance}"
     return {
-        "smiles": ["None"],        
+        "smiles": smiles,        
         "messages": [
             {
                 "role": ROLE_SYSTEM,
