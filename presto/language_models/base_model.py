@@ -67,8 +67,8 @@ class LMMMetaForCausalLM(ABC):
         projected_tensors = []
         # assuming that if caching is enabled, we'll never have past_key_values AND need to encode the instruction modality values
         kv_cache_first_token_first_layer = past_key_values[0][0]
-        first_token_forward = kv_cache_first_token_first_layer is None
-        if first_token_forward:
+        is_first_token_forward = past_key_values[0][0] is None
+        if is_first_token_forward:
             for m in self.modalities:
                 m_vals = m.forward(kwargs.get(m.name))
                 mp_vals = []
@@ -106,24 +106,12 @@ class LMMMetaForCausalLM(ABC):
             if is_text_mask.sum() == seq_len:
                 continue
             assert (
-                past_key_values is None
+                kv_cache_first_token_first_layer is None
             ), "We shouldn't have cached keys if this is the first instruction pass"
 
             for mi, m in enumerate(self.modalities):
                 # locate the group of tokens for this modality
                 m_mask = (input_ids_sample == m.token_idx).float()
-                
-                # # Below: for constant token width
-                # m_kernel = torch.tensor(
-                #     [-1] * m.token_width, dtype=m_mask.dtype, device=m_mask.device
-                # )
-                # m_conv = conv1d(
-                #     m_mask.unsqueeze(0).unsqueeze(0),
-                #     m_kernel.unsqueeze(0).unsqueeze(0),
-                # )
-
-                # # where do we see `token_width`-tokens in a row?
-                # indices = (m_conv[0, 0] == -m.token_width).nonzero(as_tuple=True)[0]
                 
                 instances_token_width = [instance.shape[0] for instance in projected_tensors[mi][i]] 
                 # find start indices of each instance
