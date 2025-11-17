@@ -80,7 +80,7 @@ class EvaluationDataset(torch.utils.data.Dataset):
         return encoded_dict
 
 
-def collate_fn(batch, modalities, pad_token_id=0):
+def collate_fn(batch, modalities, tokenizer, pad_token_id=0):
     max_len = max(item['input_ids'].shape[0] for item in batch)
     batch_size = len(batch)
 
@@ -93,14 +93,24 @@ def collate_fn(batch, modalities, pad_token_id=0):
 
     for i, item in enumerate(batch):
         seq_len = item['input_ids'].shape[0]
-        input_ids[i, :seq_len] = item['input_ids']
-        attention_mask[i, :seq_len] = 1
-
+        #input_ids[i, :seq_len] = item['input_ids']
+        #attention_mask[i, :seq_len] = 1
         for m in modalities:
             modality_inputs[m.name].append(item[m.name])
 
         ground_truths.append(item['ground_truth'])
         indices.append(item['idx'])
+
+    tokenizer.padding_side = "left"
+    input_ids_list = [item['input_ids'] for item in batch]
+    padded = tokenizer.pad(
+        {'input_ids': input_ids_list},
+        padding=True,
+        return_tensors='pt',
+        return_attention_mask=True
+    )
+    input_ids = padded['input_ids']
+    attention_mask = padded['attention_mask']
 
     return {
         'input_ids': input_ids,
@@ -171,7 +181,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=lambda batch: collate_fn(batch, model.modalities, tokenizer.pad_token_id or tokenizer.eos_token_id),
+        collate_fn=lambda batch: collate_fn(batch, model.modalities, tokenizer, tokenizer.pad_token_id or tokenizer.eos_token_id),
         pin_memory=True
     )
 
@@ -182,7 +192,6 @@ def main():
     # Get the actual model (unwrap if it's wrapped by DDP)
     unwrapped_model = accelerator.unwrap_model(model)
     model_device = next(unwrapped_model.parameters()).device
-    #model_dtype = next(unwrapped_model.parameters()).dtype
 
     for modality in unwrapped_model.modalities:
         modality.to(device=model_device, dtype=modality.dtype)
@@ -202,12 +211,13 @@ def main():
         input_ids = batch['input_ids']
         attention_mask = batch['attention_mask']
         modality_inputs = batch['modality_inputs']
+        tasks = batch['task']
 
         with torch.inference_mode():
             # Unwrap model for generation (DDP doesn't support generate)
             unwrapped_model = accelerator.unwrap_model(model)
 
-            output_ids = unwrapped_model.generate(
+            output = unwrapped_model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_new_tokens=args.max_new_tokens,
@@ -217,12 +227,16 @@ def main():
                 do_sample=args.do_sample,
                 temperature=args.temperature,
                 modality_inputs=modality_inputs,
-                pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+                output_scores=True,
             )
+
+            output_ids = output.sequences
 
         # Decode
         for i, (output, seq_len) in enumerate(zip(output_ids, batch['seq_lens'])):
-            generated_tokens = output[seq_len:]
+            prompt_seq_len = input_ids[i].shape[0]
+            generated_tokens = output[prompt_seq_len:]
             generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
 
             if args.parser:
