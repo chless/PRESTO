@@ -47,7 +47,7 @@ class EvaluationArguments(ModelArguments):
     parser: str = field(default='base', metadata={"help": "Parser for the generated output."})
     evaluator: str = field(default='smiles', metadata={"help": "Evaluator to use for the generated output."})
     cache_dir: str = field(default=None, metadata={"help": "Path to the cache directory."})
-    output_dir: str = field(default=None, metadata={"help": "Path to the output file."})
+    output_dir: str = field(default='./evaluation_dump', metadata={"help": "Path to the output file."})
     is_icl: bool = field(default=False, metadata={"help": "Whether ICL testing is enabled."})
     verbose: bool = field(default=False, metadata={"help": "Print verbose output."})
     batch_size: int = field(default=1, metadata={"help": "Batch size per GPU."})
@@ -179,7 +179,7 @@ def main():
     dataloader = DataLoader(
         eval_dataset,
         batch_size=args.batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=args.num_workers,
         collate_fn=lambda batch: collate_fn(batch, model.modalities, tokenizer, tokenizer.pad_token_id or tokenizer.eos_token_id),
         pin_memory=True
@@ -199,11 +199,6 @@ def main():
     if accelerator.is_main_process:
         logging.info(f"Moved modalities to device: {model_device}")
 
-    # Collect predictions
-    all_predictions = []
-    all_references = []
-    all_indices = []
-
     if accelerator.is_main_process:
         pbar = tqdm.tqdm(total=len(dataloader), desc="Evaluating")
 
@@ -211,13 +206,12 @@ def main():
         input_ids = batch['input_ids']
         attention_mask = batch['attention_mask']
         modality_inputs = batch['modality_inputs']
-        tasks = batch['task']
 
         with torch.inference_mode():
             # Unwrap model for generation (DDP doesn't support generate)
             unwrapped_model = accelerator.unwrap_model(model)
 
-            output = unwrapped_model.generate(
+            output_dict = unwrapped_model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_new_tokens=args.max_new_tokens,
@@ -229,9 +223,33 @@ def main():
                 modality_inputs=modality_inputs,
                 return_dict_in_generate=True,
                 output_scores=True,
+                output_logits=True,
             )
 
-            output_ids = output.sequences
+        output_ids = output_dict.sequences
+
+        batch_size, _ = output_dict.sequences.shape
+        sequence_length = len(output_dict.logits)
+        vocab_size = output_dict.logits[0].shape[-1]
+        # stack logtis
+        logits_stacked = torch.zeros(
+            batch_size,
+            0,
+            vocab_size,
+            device=output_dict.logits[0].device,
+        )
+        for i in range(sequence_length):
+            logits = output_dict.logits[i].unsqueeze(1)
+            logits = (
+                logits.view(batch_size, 1, -1).max(dim=1).values.unsqueeze(1)
+            )
+            logits_stacked = torch.cat([logits_stacked, logits], dim=1)
+
+        tasks = batch['task']
+        input_texts = [tokenizer.decode(torch.where(ids>0, ids, tokenizer.pad_token_id), skip_special_tokens=True) for ids in input_ids]
+        targets = batch['ground_truths']
+        predictions = []
+        binary_classificaiton_probs = convert_logit2binary_prob(logits_stacked, tokenizer, tasks)
 
         # Decode
         for i, (output, seq_len) in enumerate(zip(output_ids, batch['seq_lens'])):
@@ -245,9 +263,22 @@ def main():
                 except:
                     pass
 
-            all_predictions.append(generated_text)
-            all_references.append(batch['ground_truths'][i])
-            all_indices.append(batch['indices'][i])
+            predictions.append(generated_text)
+
+        save_dict = {
+            'tasks': tasks,
+            'input_texts': input_texts,
+            'targets': targets,
+            'predictions': predictions,
+            'binary_classificaiton_probs': binary_classificaiton_probs,
+            "output_dir": args.output_dir,
+        }
+        output_dir = args.output_dir or "evaluation_outputs"
+        # save tokenizer
+        tokenizer_path = os.path.join(output_dir, "tokenizer")
+        tokenizer.save_pretrained(tokenizer_path)
+
+        save_predictions(**save_dict)
 
         if accelerator.is_main_process:
             pbar.update(1)
@@ -255,41 +286,94 @@ def main():
     if accelerator.is_main_process:
         pbar.close()
 
-    # Gather results from all GPUs - accelerate makes this easy!
-    all_predictions = gather_object(all_predictions)
-    all_references = gather_object(all_references)
-    all_indices = gather_object(all_indices)
 
-    # Only main process computes metrics
-    if accelerator.is_main_process:
-        # Sort by original index
-        sorted_results = sorted(zip(all_indices, all_predictions, all_references))
-        _, final_predictions, final_references = zip(*sorted_results)
+def save_predictions(**kwargs):
+    output_dir = kwargs.pop('output_dir', 'evaluation_dump')
+    os.makedirs(output_dir, exist_ok=True)
+    # get rank
+    rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+    keys = list(kwargs.keys())
+    len_dump = len(kwargs[keys[0]])
+    for k in keys:
+        assert len(kwargs[k]) == len_dump
 
-        final_predictions = list(final_predictions)
-        final_references = list(final_references)
+    filepath = os.path.join(output_dir, f'dumps_rank_{rank}.json')
+    # load the previous dumps from filepath
+    if os.path.exists(filepath):
+        # read jsonl file
+        with open(filepath, 'r', encoding='utf8') as f:
+            cumulative_dumps = json.load(f)
+    else:
+        cumulative_dumps = []
 
-        # Save results
-        if args.cache_dir:
-            os.makedirs(args.cache_dir, exist_ok=True)
-            with open(os.path.join(args.cache_dir, "predictions.txt"), "w") as f:
-                f.write("\n".join(final_predictions))
-            with open(os.path.join(args.cache_dir, "references.txt"), "w") as f:
-                f.write("\n".join(final_references))
-            with open(os.path.join(args.cache_dir, "results.json"), "w") as f:
-                json.dump({"predictions": final_predictions, "references": final_references}, f, indent=2)
+    for i in range(len_dump):
+        line = {k: kwargs[k][i] for k in keys}
+        cumulative_dumps.append(line)
 
-        # Evaluate
-        evaluator = EVALUATOR_BUILDERS[args.evaluator]()
-        score = evaluator.evaluate(final_predictions, final_references, verbose=True)
+    with open(filepath, 'w', encoding='utf8') as f:
+        # save json file
+        json.dump(cumulative_dumps, f, ensure_ascii=True, indent=4)
 
-        logging.info(f"Results: {score}")
+def convert_logit2binary_prob(logits, tokenizer, tasks):
+    """Convert model logits into binary classification probabilities (True / False)."""
 
-        if args.output_dir:
-            os.makedirs(args.output_dir, exist_ok=True)
-            with open(os.path.join(args.output_dir, "score.json"), "w") as f:
-                json.dump(score, f, indent=2)
+    classification_classes = {
+        'bace',
+        'smol-property_prediction-bbbp',
+        'smol-property_prediction-clintox',
+        'smol-property_prediction-hiv',
+        'smol-property_prediction-sider',
+    }
 
+    # Create mask for which tasks are binary classification tasks
+    classification_masks = [any(cls in task for cls in classification_classes) for task in tasks]
+    classification_masks = torch.tensor(classification_masks, dtype=torch.bool, device=logits.device).unsqueeze(1)
+
+    # Prepare token IDs (move them to same device as logits)
+    positive_tokens = ["True", "true", "TRUE", "yes", "Yes", "YES"]
+    negative_tokens = ["False", "false", "FALSE", "no", "No", "NO"]
+
+    positive_token_ids = [tokenizer.encode(tok)[1] for tok in positive_tokens]
+    negative_token_ids = [tokenizer.encode(tok)[1] for tok in negative_tokens]
+
+    # Convert to tensors on same device
+    positive_token_ids = torch.tensor(positive_token_ids, dtype=torch.long, device=logits.device)
+    negative_token_ids = torch.tensor(negative_token_ids, dtype=torch.long, device=logits.device)
+
+    # Compute probabilities
+    probs = logits.softmax(dim=-1)
+    batch_size, seq_len, _ = probs.size()
+
+    false_logits = torch.zeros(batch_size, 1, device=logits.device)
+    true_logits = torch.zeros(batch_size, 1, device=logits.device)
+    target_logits_index = torch.zeros(batch_size, dtype=torch.long, device=logits.device)
+
+    for i in range(batch_size):
+        logits_i = logits[i]
+        prediction_ids_i = logits_i.argmax(dim=-1)  # shape: [seq_len]
+
+        # Find indices of any tokens matching positive/negative token IDs
+        mask_match = torch.isin(prediction_ids_i, torch.cat((positive_token_ids, negative_token_ids)))
+
+        if mask_match.any():
+            first_match_idx = torch.nonzero(mask_match, as_tuple=False)[0, 0]
+            target_logits_index[i] = first_match_idx
+        else:
+            target_logits_index[i] = 0
+
+        # Use .sum() properly across the vocabulary dim
+        false_logits[i] = probs[i, target_logits_index[i], negative_token_ids].sum()
+        true_logits[i]  = probs[i, target_logits_index[i], positive_token_ids].sum()
+
+    # Stack probabilities and normalize
+    total_probs = torch.cat([false_logits, true_logits], dim=-1)
+    total_probs = total_probs.softmax(dim=-1)
+
+    # Fill non-classification tasks with -1
+    total_probs = torch.where(classification_masks, total_probs, torch.full_like(total_probs, -1.0))
+
+    # Convert to list for output
+    return total_probs.tolist()
 
 if __name__ == "__main__":
     main()

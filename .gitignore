@@ -174,3 +174,4 @@ scripts/scaffold/*.pkl
 
 .vscode
 checkpoint
+evaluation_dump/
