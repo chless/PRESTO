@@ -92,8 +92,7 @@ class LMMMetaForCausalLM(ABC):
                 projected_tensors.append(mp_vals)
 
         indices = None
-        #<DEBUG>
-        # TODO: figure out why graph embedding is not injected in emgbedding sequence
+
         for i, input_ids_sample in enumerate(input_ids):
             is_text_mask = input_ids_sample >= 0
 
@@ -155,5 +154,5 @@ class LMMMetaForCausalLM(ABC):
             )
         except:
             projected_tensors = None
-        # </DEBUG>
+
         return None, attention_mask, past_key_values, inputs_embeds, labels, projected_tensors

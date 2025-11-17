@@ -32,6 +32,8 @@ from presto.training import ModelArguments
 from presto.inference import load_trained_lora_model, load_trained_model
 from presto.data_tools import encode_chat, parse_chat_output, encode_interleaved_data
 from presto.chemistry_tools import EVALUATOR_BUILDERS
+# get time
+from time import time
 
 
 @dataclass
@@ -128,6 +130,9 @@ def main():
     parser = transformers.HfArgumentParser((EvaluationArguments,))
     args, _ = parser.parse_args_into_dataclasses(return_remaining_strings=True)
 
+    output_dir = args.output_dir or "evaluation_outputs"
+    os.makedirs(output_dir, exist_ok=True)
+
     # Initialize Accelerator - THIS IS THE KEY DIFFERENCE!
     # Handles all distributed setup automatically
     accelerator = Accelerator()
@@ -157,12 +162,14 @@ def main():
             model_name_or_path=args.model_name_or_path,
             model_lora_path=args.model_lora_path,
             load_bits=args.load_bits,
+            device_map=None,  # Let Accelerate handle device placement
         )
     else:
         model, tokenizer = load_trained_model(
             model_name_or_path=args.model_name_or_path,
             pretrained_projectors_path=args.projectors_path,
             load_bits=args.load_bits,
+            device_map=None,  # Let Accelerate handle device placement
         )
 
     model.eval()
@@ -172,8 +179,11 @@ def main():
         "meta-llama/Llama-2-7b-chat-hf"
     ).get_chat_template()
 
+    # Capture modalities before model gets wrapped by DDP
+    modalities = model.modalities
+
     eval_dataset = EvaluationDataset(
-        dataset, tokenizer, model.modalities, llama2_chat_template, args.is_icl
+        dataset, tokenizer, modalities, llama2_chat_template, args.is_icl
     )
 
     dataloader = DataLoader(
@@ -181,7 +191,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=lambda batch: collate_fn(batch, model.modalities, tokenizer, tokenizer.pad_token_id or tokenizer.eos_token_id),
+        collate_fn=lambda batch: collate_fn(batch, modalities, tokenizer, tokenizer.pad_token_id or tokenizer.eos_token_id),
         pin_memory=True
     )
 
@@ -273,8 +283,6 @@ def main():
             'binary_classificaiton_probs': binary_classificaiton_probs,
             "output_dir": args.output_dir,
         }
-        output_dir = args.output_dir or "evaluation_outputs"
-        # save tokenizer
         tokenizer_path = os.path.join(output_dir, "tokenizer")
         tokenizer.save_pretrained(tokenizer_path)
 
@@ -289,7 +297,6 @@ def main():
 
 def save_predictions(**kwargs):
     output_dir = kwargs.pop('output_dir', 'evaluation_dump')
-    os.makedirs(output_dir, exist_ok=True)
     # get rank
     rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
     keys = list(kwargs.keys())
