@@ -19,9 +19,11 @@ def load_trained_lora_model(
     model_cls: Optional[Type] = None,
     modalities: Optional[List[Modality]] = None,
     load_bits: int = 16,
-    device_map: str = "auto",
+    device_map: Optional[str] = "auto",
 ):
-    load_kwargs = {"device_map": device_map}
+    load_kwargs = {}
+    if device_map is not None:
+        load_kwargs["device_map"] = device_map
 
     if load_bits == 8:
         load_kwargs["load_in_8bit"] = True
@@ -83,9 +85,11 @@ def load_trained_model(
     model_cls: Optional[Type] = None,
     modalities: Optional[List[Modality]] = None,
     load_bits: int = 16,
-    device_map: str = "auto",
+    device_map: Optional[str] = "auto",
 ):
-    load_kwargs = {"device_map": device_map}
+    load_kwargs = {}
+    if device_map is not None:
+        load_kwargs["device_map"] = device_map
 
     if load_bits == 8:
         load_kwargs["load_in_8bit"] = True
